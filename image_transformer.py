@@ -8,40 +8,49 @@ from helpers.utils import OCR
 
 class ITransformer(OCR, FileUtils):
     def __init__(self, dataPath, outputPath):
-        super(OCR).__init__()
+        super().__init__()
         self.dataPath = dataPath
         self.outputPath = outputPath
 
-    def toJson(self, fileName, imgPath):
-        imgId = fileName.split('.')[0]
+    def toJson(self, imgPath):
         img = cv2.imread(imgPath)
         boxes = self.getTextBoxes(img)
-        res = {
-            imgId: boxes
-        }
-        return imgId, res
+        return boxes
 
     def allToJson(self):
         mediaPath = f'{self.dataPath}/media'
+        try:
+            with open(f'{self.outputPath}/ocr_info.json', 'r') as fileDesc:
+                data = fileDesc.read()
+        except Exception as e:
+            data = '{}'
+
+        obj = json.loads(data)
+        l = 0
 
         for dirPath, fileName in self.getAllFiles(mediaPath):
             imgPath = f'{dirPath}/{fileName}'
+            imgId = fileName.split('.')[0]
             try:
-                try:
-                    with open(f'{self.dataPath}/info.json', 'r') as fileDesc:
+                if imgId not in obj:
+                    imgInfo = self.toJson(imgPath)
+                    obj[imgId] = imgInfo
+                
+                l = len(obj.keys())
+                print(l)
+
+                if l % 100 == 0:
+                    with open(f'{self.outputPath}/ocr_info.json', 'w+') as fileDesc:
+                        json.dump(obj, fileDesc)
+
+                    with open(f'{self.outputPath}/ocr_info.json', 'r') as fileDesc:
                         data = fileDesc.read()
-                except Exception as e:
-                    data = '{}'
-
-                obj = json.loads(data)
-                imgId, imgInfo = self.toJson(fileName, imgPath)
-                obj[imgId] = imgInfo
-
-                with open(f'{self.outputPath}/info.json', 'w+') as fileDesc:
-                    json.dump(obj, fileDesc)
+                        obj = json.loads(data)
 
             except Exception as e:
                 print(f'Failed: {fileName}; E: {e}')
+
+        
 
 
 if __name__ == '__main__':
