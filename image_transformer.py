@@ -37,21 +37,13 @@ class ITransformer(OCR, FileUtils):
                     obj[imgId] = imgInfo
                 
                 l = len(obj.keys())
-                print(l)
 
                 if l % 100 == 0:
                     with open(f'{self.outputPath}/ocr_info.json', 'w+') as fileDesc:
                         json.dump(obj, fileDesc)
 
-                    with open(f'{self.outputPath}/ocr_info.json', 'r') as fileDesc:
-                        data = fileDesc.read()
-                        obj = json.loads(data)
-
             except Exception as e:
                 print(f'Failed: {fileName}; E: {e}')
-
-        
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
