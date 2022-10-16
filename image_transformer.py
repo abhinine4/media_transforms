@@ -26,7 +26,6 @@ class ITransformer(OCR, FileUtils):
             data = '{}'
 
         obj = json.loads(data)
-        l = 0
 
         for dirPath, fileName in self.getAllFiles(mediaPath):
             imgPath = f'{dirPath}/{fileName}'
@@ -44,6 +43,9 @@ class ITransformer(OCR, FileUtils):
 
             except Exception as e:
                 print(f'Failed: {fileName}; E: {e}')
+
+        with open(f'{self.outputPath}/ocr_info.json', 'w+') as fileDesc:
+            json.dump(obj, fileDesc)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
