@@ -24,7 +24,6 @@ class TTransform:
         replacements = []
         
         for idx, token in enumerate(self.textUtils.getPOS(line)):
-            print(idx, token.i, token.idx, token.text)
             tokens.append(token)
             if token.pos_ in posList:
                 if token.text not in self.cache:
@@ -75,11 +74,11 @@ class TTransform:
         
         for textType in textTypes:
             text = textInfo.get(textType, '')
-            replacedText, replacements = self.replaceLine(title)
+            replacedText, replacements = self.replaceLine(text)
             if replacedText is not None:
                 textManipulations.append({
-                    'title': {
-                        'original': title,
+                    textType: {
+                        'original': text,
                         'modified': replacedText,
                         'replacements': replacements,
                     }
@@ -109,12 +108,12 @@ class TTransform:
         c = 0
 
         for imgId, boxes in ocrInfo.items():
-            manipulations = self.replacePOSBoxesAll(boxes, info.get(imgId, {}))
+            manipulations = self.replacePOS(boxes, info.get(imgId, {}))
             if manipulations:
                 obj[imgId] = manipulations
                 c += 1
 
-            print('.', end=' ')
+            print(imgId, end=' ')
 
             if c > 50:
                 with open(f'{self.outputPath}/text_manipulations.json', 'w+') as fileDesc:
