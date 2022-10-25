@@ -12,15 +12,17 @@ from helpers.file_utils import FileUtils
 
 class TextUtils:
     def __init__(self, cachePath, cacheUpdateThreshold=50):
-        nltk.download('wordnet')
-        nltk.download('omw-1.4')
-
         self.cachePath = cachePath
         self.antonymCachePath = f'{self.cachePath}/antonym.json'
         self.antonymCache = FileUtils.readJson(self.antonymCachePath)
         self.antonymCacheMissCount = 0
         self.cacheUpdateThreshold = cacheUpdateThreshold
-        self.nlp = spacy.load("en_core_web_sm")
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except Exception as e:
+            nltk.download('wordnet')
+            nltk.download('omw-1.4')
+            self.nlp = spacy.load("en_core_web_sm")
 
     @staticmethod
     def cleanString(s):
@@ -32,7 +34,6 @@ class TextUtils:
             json.dump(self.antonymCache, fileDesc)
 
     def getPOS(self, text):
-        text = self.cleanString(text)
         doc = self.nlp(text)
         return doc
 

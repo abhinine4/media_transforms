@@ -1,5 +1,6 @@
 import argparse
 import json
+import random
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -12,52 +13,103 @@ class TTransform:
         self.textUtils = TextUtils(cachePath=cachePath) 
         self.dataPath = dataPath
         self.outputPath = outputPath
+        self.cache = {}
 
-    def replacePOS(self, line, posList=None):
-        replaced = False
+    def replaceLine(self, line, posList=None):
         if not posList:
-            posList = set(['NOUN', 'VERB', 'ADJ', 'ADV'])
-
-        res = []
-
-        for token in self.textUtils.getPOS(line):
-            word = token.text
+            posList = set(['ADJ', 'ADV', 'NOUN', 'VERB'])
+            
+        tokens = []
+        interested = []
+        replacements = []
+        
+        for idx, token in enumerate(self.textUtils.getPOS(line)):
+            print(idx, token.i, token.idx, token.text)
+            tokens.append(token)
             if token.pos_ in posList:
-                antonym = self.textUtils.getAntonym(word)
-                # print(word, token.pos_, antonym)
-                if antonym:
-                    replaced = True 
-                    res.append(antonym)
-                else:
-                    res.append(word)
-            else:
-                res.append(word)
-
-        return ' '.join(res) if replaced else None 
-
+                if token.text not in self.cache:
+                    antonym = self.textUtils.getAntonym(token.text)
+                    if antonym: 
+                        self.cache[token.text] = antonym
+                if self.cache.get(token.text, None):
+                    interested.append((idx, self.cache[token.text]))
+                
+        if len(interested) == 0:
+            return None, None
+        
+        k = random.randint(0, len(interested)-1)
+        idx, antonym = interested[k]
+        
+        replacement = {
+            'word': tokens[idx].text,
+            'replacement': antonym,
+            'startIdx': tokens[idx].idx,
+            'endIdx': tokens[idx].idx + len(tokens[idx].text)-1,
+        }
+        replacements.append(replacement)
+        tokens[idx] = antonym
+        
+        return ' '.join([t.text if not isinstance(t, str) else t for t in tokens ]), replacements
     
-    def replacePOSBoxesAll(self, boxes):
-        manipulations = {}
+    def replaceOCR(self, boxes):
+        ocrManipulations = []
         for (topLeft, bottomRight), originalText in boxes:
             if len(originalText.split(' ')) < 3:
                 continue 
-            replacedText = self.replacePOS(originalText)
+            replacedText, replacements = self.replaceLine(originalText)
             if replacedText is not None:
-                manipulations[f'{topLeft[0]}, {topLeft[1]}, {bottomRight[0]}, {bottomRight[1]}'] = {
+                ocrManipulations.append({
+                    'boundingBox': {
+                        'topLeft': topLeft,
+                        'bottomRight': bottomRight,
+                    },
                     'truth': originalText, 
-                    'inconsistent': replacedText
-                }
+                    'modified': replacedText,
+                    'replacements': replacements,
+                })
+                
+        return ocrManipulations
+    
+    def replaceText(self, textInfo, textTypes):
+        textManipulations = []
+        
+        for textType in textTypes:
+            text = textInfo.get(textType, '')
+            replacedText, replacements = self.replaceLine(title)
+            if replacedText is not None:
+                textManipulations.append({
+                    'title': {
+                        'original': title,
+                        'modified': replacedText,
+                        'replacements': replacements,
+                    }
+                })
+            
+        return textManipulations
 
-        return manipulations
+    
+    def replacePOS(self, boxes, textInfo):
+        self.cache = {}
+        ocrManipulations = self.replaceOCR(boxes)
+        textManipulations = self.replaceText(textInfo, textTypes=['title'])
+        res = {
+            'type': {
+                'text': textManipulations,
+                'ocr': ocrManipulations,
+            }
+        }
+        
+        return res
 
 
     def replacePOSAll(self):
+        info = FileUtils.readJson(f'{self.dataPath}/info.json')
         ocrInfo = FileUtils.readJson(f'{self.dataPath}/ocr_info.json')
         obj = FileUtils.readJson(f'{self.outputPath}/text_manipulations.json')
         c = 0
 
         for imgId, boxes in ocrInfo.items():
-            manipulations = self.replacePOSBoxesAll(boxes)
+            manipulations = self.replacePOSBoxesAll(boxes, info.get(imgId, {}))
             if manipulations:
                 obj[imgId] = manipulations
                 c += 1
