@@ -23,6 +23,8 @@ class TTransform:
         interested = []
         replacements = []
         
+        line = self.textUtils.cleanString(line)
+        
         for idx, token in enumerate(self.textUtils.getPOS(line)):
             tokens.append(token)
             if token.pos_ in posList:
@@ -30,6 +32,7 @@ class TTransform:
                     antonym = self.textUtils.getAntonym(token.text)
                     if antonym: 
                         self.cache[token.text] = antonym
+                        
                 if self.cache.get(token.text, None):
                     interested.append((idx, self.cache[token.text]))
                 
@@ -40,31 +43,27 @@ class TTransform:
         idx, antonym = interested[k]
         
         replacement = {
-            'word': tokens[idx].text,
-            'replacement': antonym,
-            'startIdx': tokens[idx].idx,
-            'endIdx': tokens[idx].idx + len(tokens[idx].text)-1,
+            tokens[idx]: antonym,
         }
-        replacements.append(replacement)
         tokens[idx] = antonym
         
-        return ' '.join([t.text if not isinstance(t, str) else t for t in tokens ]), replacements
+        return ' '.join([t.text if not isinstance(t, str) else t for t in tokens]), replacement
     
     def replaceOCR(self, boxes):
         ocrManipulations = []
         for (topLeft, bottomRight), originalText in boxes:
             if len(originalText.split(' ')) < 3:
                 continue 
-            replacedText, replacements = self.replaceLine(originalText)
+            replacedText, replacement = self.replaceLine(originalText)
             if replacedText is not None:
                 ocrManipulations.append({
                     'boundingBox': {
                         'topLeft': topLeft,
                         'bottomRight': bottomRight,
                     },
-                    'truth': originalText, 
+                    'original': originalText, 
                     'modified': replacedText,
-                    'replacements': replacements,
+                    'replacement': replacement,
                 })
                 
         return ocrManipulations
@@ -74,13 +73,13 @@ class TTransform:
         
         for textType in textTypes:
             text = textInfo.get(textType, '')
-            replacedText, replacements = self.replaceLine(text)
+            replacedText, replacement = self.replaceLine(text)
             if replacedText is not None:
                 textManipulations.append({
                     textType: {
                         'original': text,
                         'modified': replacedText,
-                        'replacements': replacements,
+                        'replacement': replacement,
                     }
                 })
             
@@ -91,36 +90,33 @@ class TTransform:
         self.cache = {}
         ocrManipulations = self.replaceOCR(boxes)
         textManipulations = self.replaceText(textInfo, textTypes=['title'])
-        res = {
-            'type': {
-                'text': textManipulations,
-                'ocr': ocrManipulations,
-            }
-        }
         
-        return res
+        return ocrManipulations, textManipulations
 
 
     def replacePOSAll(self):
         info = FileUtils.readJson(f'{self.dataPath}/info.json')
         ocrInfo = FileUtils.readJson(f'{self.dataPath}/ocr_info.json')
-        obj = FileUtils.readJson(f'{self.outputPath}/text_manipulations.json')
+        ocrObj = FileUtils.readJson(f'{self.outputPath}/pos_ocr.json')
+        textObj = FileUtils.readJson(f'{self.outputPath}/pos_text.json')
         c = 0
 
         for imgId, boxes in ocrInfo.items():
-            manipulations = self.replacePOS(boxes, info.get(imgId, {}))
-            if manipulations:
-                obj[imgId] = manipulations
-                c += 1
-
-            print(imgId, end=' ')
-
-            if c > 50:
-                with open(f'{self.outputPath}/text_manipulations.json', 'w+') as fileDesc:
-                    json.dump(obj, fileDesc)
-
-        with open(f'{self.outputPath}/text_manipulations.json', 'w+') as fileDesc:
-            json.dump(obj, fileDesc)
+            ocr, text = self.replacePOS(boxes, info.get(imgId, {}))
+            
+            if ocr:
+                ocrObj[imgId] = ocr
+                with open(f'{self.outputPath}/pos_ocr.json', 'w+') as fileDesc:
+                    json.dump(ocrObj, fileDesc)
+                    
+            
+            if text:
+                textObj[imgId] = text
+                with open(f'{self.outputPath}/pos_text.json', 'w+') as fileDesc:
+                    json.dump(textObj, fileDesc)
+            
+            c += 1
+            print(f'[{c}/{len(ocrInfo.items())}]')
 
 
 if __name__ == '__main__':
@@ -143,8 +139,6 @@ if __name__ == '__main__':
 
     transformer = TTransform(dataPath, outputPath, cachePath)
     transformer.replacePOSAll()
-    # res = transformer.replacePOS('The stock prices are increasing')
-    # print(res)
 
 
 
