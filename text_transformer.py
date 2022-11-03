@@ -43,7 +43,7 @@ class TTransform:
         idx, antonym = interested[k]
         
         replacement = {
-            tokens[idx]: antonym,
+            tokens[idx].text: antonym,
         }
         tokens[idx] = antonym
         
@@ -105,6 +105,7 @@ class TTransform:
             ocr, text = self.replacePOS(boxes, info.get(imgId, {}))
             
             if ocr:
+                print(ocr)
                 ocrObj[imgId] = ocr
                 with open(f'{self.outputPath}/pos_ocr.json', 'w+') as fileDesc:
                     json.dump(ocrObj, fileDesc)

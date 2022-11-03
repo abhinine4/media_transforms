@@ -41,7 +41,7 @@ class TextUtils:
         res = []
         chars = re.escape(string.punctuation)
         for w in s.split(' '):
-            rep = re.sub(r'['+chars+'].', '', w+' ')
+            rep = re.sub(r'['+chars+']', '', w+' ')
             res.append(rep.strip())
         
         res[0] = res[0].title()
