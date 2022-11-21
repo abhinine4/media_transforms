@@ -1,7 +1,8 @@
 import argparse
 import json
 import random
-
+import pandas as pd
+import numpy as np
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -119,6 +120,152 @@ class TTransform:
             c += 1
             print(f'[{c}/{len(ocrInfo.items())}]')
 
+    ### Abhishek: NER functions
+    def replaceNERLine(self, text):
+        ent_list = ['DATE','GPE','MONEY','TIME','QUANTITY','PERCENT','LOC','NORP','ORG','ORDINAL','LAW','FAC','PRODUCT', 'PERSON']
+
+        tokens = []
+        interested = []
+        replacements = []
+    
+        for index,token in enumerate(self.textUtils.getNER(text)):
+            tokens.append(token)
+            if token.ent_type_ in ent_list:
+                if token.text not in self.cache:
+                    ner_entity = self.textUtils.getRandomEntity(token.text, token.ent_type_)
+                    if ner_entity:
+                        self.cache[token.text] = ner_entity
+
+                if self.cache.get(token.text, None):
+                    interested.append((index, self.cache[token.text]))
+
+        if len(interested) == 0:
+            return None, None
+
+        k = random.randint(0, len(interested)-1)
+        index, entity = interested[k]
+
+        org = text
+        or_term = tokens[index].text
+        or_start = mod_start = tokens[index].idx
+        or_end = tokens[index].idx + len(tokens[index].text)-1
+
+        tokens[index] = entity
+
+        mod = ' '.join([t.text if not isinstance(t, str) else t for t in tokens ])
+        mod_term = tokens[index]
+        mod_end = mod_start + len(mod_term)-1 
+
+        replacement = {or_term:mod_term}
+        # replacements.append(replacement)
+        return mod, replacement
+
+    def replaceNER_OCR(self, boxes):
+        ocrManipulations = []
+        for (topLeft, bottomRight), originalText in boxes:
+            if len(originalText.split(' ')) < 3:
+                continue 
+            replacedText, replacement = self.replaceNERLine(originalText)
+            if replacedText is not None:
+                ocrManipulations.append({
+                    'boundingBox': {
+                        'topLeft': topLeft,
+                        'bottomRight': bottomRight,
+                    },
+                    'original': originalText, 
+                    'modified': replacedText,
+                    'replacement': replacement,
+                })
+                
+        return ocrManipulations
+    
+    def replaceNER_Text(self, textInfo, textTypes):
+        textManipulations = []
+        
+        for textType in textTypes:
+            text = textInfo.get(textType, '')
+            replacedText, replacement = self.replaceNERLine(text)
+            if replacedText is not None:
+                textManipulations = {
+                    textType: {
+                        'original': text,
+                        'modified': replacedText,
+                        'replacement': replacement,
+                    }
+                }
+            print(textManipulations)
+            
+        return textManipulations, replacedText
+
+    def replaceNER(self, boxes, textInfo):
+        self.cache = {}
+        ocrManipulations_log = self.replaceNER_OCR(boxes)
+        textManipulations_log, replacedText = self.replaceNER_Text(textInfo, textTypes=['title'])
+        
+        return textManipulations_log, replacedText, ocrManipulations_log
+
+    ### TODO: change paths / function similar to replacePOSALL
+    def replaceNERAll(self):
+        info = FileUtils.readJson(f'{self.datapath}/info.json')
+        ocrInfo = FileUtils.readJson(f'{self.datapath}/ocr_info.json')
+        text_obj = FileUtils.readJson(f'{self.datapath}/info.json')
+        text_log_obj = FileUtils.readJson(f'{self.outputpath}/ner_info_log.json')
+        
+        for imgId, boxes in ocrInfo.items():
+            text_log, replaced_text, ocr_log = self.replaceNER(boxes, info.get(imgId, {}))
+            if text_log:
+                text_obj[imgId]["title"] = replaced_text
+                text_log_obj[imgId] = text_log
+                
+            if ocr_log:
+                ocrInfo[imgId] = ocr_log
+
+
+        with open('../for_eval/ner_info_log.json', 'w+') as fileDesc:
+            json.dump(text_log_obj, fileDesc)
+
+        with open('../for_eval/ner_ocr.json', 'w+') as fileDesc:
+            json.dump(ocrInfo, fileDesc)
+
+        with open('../for_eval/ner_info.json', 'w+') as fileDesc:
+            json.dump(text_obj, fileDesc)
+
+
+    def random_replacement(self):
+        ### TODO: chenage datapath here
+        info_dir = self.datapath+'info.json'
+        f = open(info_dir)
+        random_mani = json.load(f)
+
+        or_data = pd.read_json(info_dir).T
+        ran_data = pd.DataFrame()
+        ran_data = or_data.copy(deep=True)
+
+        random_index = np.random.permutation(ran_data.index)
+        random_index_title = ran_data["title"].loc[random_index]
+        random_data = (random_index, random_index_title)
+        random ={}
+        for i in range(len(ran_data)):
+            image = ran_data["graphic"].iloc[i][11:-5]
+
+            original_title = ran_data["title"].iloc[i]
+            random_title = random_index_title.iloc[i]
+            original_index = image
+            random_idx = str(random_index[i])
+            # ran_data["title"].iloc[i] = random_title
+            random_mani[image]["title"] = random_title
+            replacement = {'original': original_title,
+                            'modified' : random_title,
+                            'replacement': {original_index : random_idx}}
+            random[image] = replacement
+
+        with open('../for_eval/random_info.json', 'w+') as fileDesc:
+            json.dump(random_mani, fileDesc)
+
+        with open('../for_eval/random_info_log.json', 'w+') as fileDesc:
+            json.dump(random, fileDesc)
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -140,6 +287,8 @@ if __name__ == '__main__':
 
     transformer = TTransform(dataPath, outputPath, cachePath)
     transformer.replacePOSAll()
+    transformer.replaceNERAll()
+    transformer.random_replacement()
 
 
 

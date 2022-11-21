@@ -2,7 +2,7 @@ import random
 import re
 import json
 import string
-
+import pickle
 import nltk
 from nltk.corpus import wordnet
 import spacy
@@ -21,6 +21,8 @@ class TextUtils:
         self.antonymCacheMissCount = 0
         self.cacheUpdateThreshold = cacheUpdateThreshold
         self.lemmatizer = WordNetLemmatizer()
+        entity_file = f'{self.cachePath}/pre_entities.pkl'
+        self.pre_entites = pickle.load(entity_file)
         try:
             self.nlp = spacy.load("en_core_web_sm")
         except Exception as e:
@@ -89,3 +91,14 @@ class TextUtils:
             k = random.randint(0, n-1)
         
         return antonyms[k] if antonyms else None
+
+    def getRandomEntity(self, word, ent_type):
+        entities = self.pre_entites[ent_type]
+        random_entity = random.choice(entities)
+        while random_entity == word:
+            random_entity = random.choice(entities)
+        return random_entity
+
+    def getNER(self, text):
+        doc = self.nlp(text)
+        return doc
